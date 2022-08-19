@@ -1,8 +1,14 @@
-import { FormEvent, useRef, useState } from "react";
+import React, { FormEvent, useEffect, useRef, useState } from "react";
 import { Provider, useAuthContext } from "./AuthContext";
-import { authState, loginUser, registerUser } from "./requests";
-
-import Content from "./Content";
+import {
+    deleteBook,
+    getBooks,
+    loginUser,
+    registerUser,
+    sendBook,
+} from "./requests";
+import { BooksList, BookForm, Book } from "./books";
+import Navbar from "./Navbar";
 
 export interface User {
     username: string;
@@ -13,20 +19,56 @@ function App() {
     return (
         <div className="app">
             <Provider>
-                <nav>
-                    <h1>React auth demo</h1>
-                </nav>
-                <main>
-                    <RegisterForm />
-                    <Protected component={<Content />} />
-                </main>
+                <Navbar />
+                <section className="content">
+                    <Protected fallback={<RegisterForm />}>
+                        <Main />
+                    </Protected>
+                </section>
             </Provider>
         </div>
     );
 }
 
+function Main() {
+    const [books, setBooks] = useState<Book[]>([]);
+    const [refresh, setRefresh] = useState(false);
+
+    useEffect(() => {
+        getBooks().then((_books) => {
+            setBooks(_books);
+        });
+    }, [refresh]);
+
+    async function addBookAction(book: Book) {
+        const ok = await sendBook(book);
+        ok && setBooks((prev) => [...prev, book]);
+    }
+
+    async function deleteBookAction(name: string) {
+        const ok = await deleteBook(name);
+        ok && setBooks((perv) => perv.filter((it) => it.name !== name));
+    }
+
+    function triggerRefresh() {
+        setRefresh((prev) => !prev);
+    }
+
+    return (
+        <main>
+            <BookForm addAction={addBookAction} />
+            <section>
+                <h2>Super secret Content 🤫</h2>
+                <br />
+                <button onClick={triggerRefresh}>Refresh from server</button>
+                <BooksList books={books} deleteAction={deleteBookAction} />
+            </section>
+        </main>
+    );
+}
+
 function RegisterForm() {
-    const { setIsLogged } = useAuthContext();
+    const { login } = useAuthContext();
     const [errorMsg, setErrorMsg] = useState("");
     const usernameInput = useRef<HTMLInputElement>(null);
     const passwordInput = useRef<HTMLInputElement>(null);
@@ -43,7 +85,7 @@ function RegisterForm() {
         passwordInput.current!.value = "";
     }
 
-    async function handleSumbit(e: FormEvent<HTMLFormElement>) {
+    async function handleSubmit(e: FormEvent<HTMLFormElement>) {
         e.preventDefault();
         if (!usernameInput.current || !passwordInput.current) return;
 
@@ -54,20 +96,23 @@ function RegisterForm() {
 
         clearInputs();
         const func = isLoginForm ? loginUser : registerUser;
-        const { isLogged, msg } = await func(user);
+        const { isLogged, msg, username } = await func(user);
         msg && setErrorMsg(msg);
-        isLogged && setIsLogged(isLogged);
+        if (isLogged) {
+            login(username);
+        }
     }
 
     return (
-        <div>
-            <form onSubmit={handleSumbit} className="column">
+        <div className="container margin-y">
+            <form onSubmit={handleSubmit} className="column">
                 <h2>{formState} form</h2>
 
-                {errorMsg !== "" && <p className="error">{errorMsg}</p>}
+                {errorMsg && <p className="error">{errorMsg}</p>}
 
                 <label htmlFor="username">Username</label>
                 <input
+                    required
                     type="text"
                     name="username"
                     id="username"
@@ -76,6 +121,7 @@ function RegisterForm() {
 
                 <label htmlFor="password">Password</label>
                 <input
+                    required
                     type="password"
                     name="password"
                     id="password"
@@ -87,36 +133,22 @@ function RegisterForm() {
                 <button onClick={toggleForm}>
                     Use {isLoginForm ? "register" : "login"} form
                 </button>
-                <button
-                    onClick={async () => {
-                        const { isLogged } = await authState();
-                        console.log({
-                            isLogged,
-                            date: new Date().toUTCString(),
-                        });
-                    }}
-                >
-                    Check auth
-                </button>
             </div>
         </div>
     );
 }
 
-function Protected({ component }: { component: React.ReactNode }) {
+const Protected: React.FC<{
+    children: React.ReactNode;
+    fallback: React.ReactNode;
+}> = ({ children, fallback }) => {
     const { isLogged } = useAuthContext();
-
     return (
-        <div>
-            {isLogged ? (
-                <>{component}</>
-            ) : (
-                <>
-                    <h2>⚠️ Protected Content, please Login ⚠️</h2>
-                </>
-            )}
-        </div>
+        <>
+            {isLogged && children}
+            {!isLogged && fallback}
+        </>
     );
-}
+};
 
 export default App;

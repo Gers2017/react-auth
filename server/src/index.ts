@@ -10,6 +10,9 @@ import {
     User,
     UserDB,
     Auth,
+    AuthErr,
+    AuthResponse,
+    parseCookiePayload,
 } from "./auth";
 
 import booksRouter from "./routers/books";
@@ -36,12 +39,14 @@ app.use("/books", booksRouter);
 // auth
 
 export const users = new Map<string, UserDB>();
+const changeUserUuid = (username: string) => {
+    const user = users.get(username);
+    if (!user) return;
+    users.set(username, { ...user, uuid: genUUID() });
+};
 
-function sendInvalidgUserError(res: Response) {
-    res.status(401).json({
-        isLogged: false,
-        msg: "Missing username or password",
-    });
+function sendMissingUser(res: Response) {
+    res.status(400).json(AuthErr("Missing username or password"));
 }
 
 app.get("/users", (req, res) => {
@@ -52,7 +57,9 @@ app.get("/auth-state", Auth, (_req, res) => {
     res.json({ isLogged: true });
 });
 
-app.get("/logout", Auth, (_req, res) => {
+app.get("/logout", Auth, (req, res) => {
+    const jid = parseCookiePayload(req)!;
+    changeUserUuid(jid.username);
     res.cookie("jid", "");
     res.sendStatus(200);
 });
@@ -61,15 +68,12 @@ app.post("/register", async (req, res) => {
     const { username, password } = req.body as User;
 
     if (!username || !password) {
-        sendInvalidgUserError(res);
+        sendMissingUser(res);
         return;
     }
 
     if (users.has(username)) {
-        res.status(405).json({
-            isLogged: false,
-            msg: "Username already taken",
-        });
+        res.status(400).json(AuthErr("Username already taken"));
         return;
     }
 
@@ -83,15 +87,14 @@ app.post("/register", async (req, res) => {
     });
 
     setSessionCookie(res, username, uuid);
-    res.json({ isLogged: true });
+    res.json({ isLogged: true, username, msg: "" } as AuthResponse);
 });
 
 app.post("/login", async (req, res) => {
     const { username, password } = req.body as User;
-    console.log("login:", req.body);
 
     if (!username || !password) {
-        sendInvalidgUserError(res);
+        sendMissingUser(res);
         return;
     }
 
@@ -99,10 +102,7 @@ app.post("/login", async (req, res) => {
     const isValidPassword = await checkPassword(hashed, password);
 
     if (!isValidPassword) {
-        res.status(405).json({
-            isLogged: false,
-            msg: "Invalid username or passsword",
-        });
+        res.status(400).json(AuthErr("Invalid username or password"));
         return;
     }
 
@@ -111,7 +111,7 @@ app.post("/login", async (req, res) => {
     users.set(username, { ...users.get(username)!, uuid });
 
     setSessionCookie(res, username, uuid);
-    res.json({ isLogged: true, msg: "" });
+    res.json({ isLogged: true, username, msg: "" } as AuthResponse);
 });
 
 app.listen(PORT, () => {

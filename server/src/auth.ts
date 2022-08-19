@@ -12,26 +12,39 @@ export interface UserDB extends User {
     uuid: string;
 }
 
+export type AuthResponse = { isLogged: boolean; username: string; msg: string };
+
+export function AuthErr(msg: string) {
+    return { isLogged: false, username: "", msg };
+}
+
 export type CookiePayload = { username: string; uuid: string };
 
+export function parseCookiePayload(req: Request) {
+    if (!req.cookies.jid) return null;
+    return JSON.parse(req.cookies.jid) as CookiePayload;
+}
+
 export function Auth(req: Request, res: Response, next: NextFunction) {
-    if (!req.cookies.jid) {
-        res.status(403).json({ isLogged: false });
+    const jid = parseCookiePayload(req);
+
+    if (!jid) {
+        res.json({ isLogged: false });
         return;
     }
 
-    const jid = JSON.parse(req.cookies.jid) as CookiePayload;
-    console.log(jid, new Date().toUTCString());
+    const uuid = users.get(jid.username)?.uuid || "";
+    console.log({
+        jid,
+        userUUID: uuid,
+        date: new Date().toUTCString(),
+    });
 
-    if (compareUuid(jid)) {
-        next();
-    } else {
-        res.status(403).json({ isLogged: false });
+    if (jid.uuid !== uuid) {
+        res.json({ isLogged: false });
     }
-}
 
-export function compareUuid(jid: CookiePayload) {
-    return jid.uuid === (users.get(jid.username)?.uuid || "");
+    next();
 }
 
 export function setSessionCookie(
@@ -43,6 +56,7 @@ export function setSessionCookie(
         username,
         uuid,
     };
+
     // ⚠️ Setting the cookie ⚠️
     res.cookie("jid", JSON.stringify(data), {
         // value which specifies whether or not this cookie can only be retrieved over an SSL or HTTPS connection
@@ -68,7 +82,7 @@ export async function genHashedPassword(password: string) {
 
 export async function checkPassword(
     hashedPassword: string,
-    userPasssword: string,
+    userPassword: string,
 ) {
-    return await compare(userPasssword, hashedPassword);
+    return await compare(userPassword, hashedPassword);
 }

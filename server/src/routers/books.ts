@@ -23,19 +23,24 @@ export function removeBook(name: string) {
 }
 
 app.get("/", (_req, res) => {
-    res.json({ books: [...books.values()] });
+    res.json([...books.values()]);
 });
 
-app.post("/", Auth, (req, res) => {
+app.post("/", (req, res) => {
     const { name, author, price } = req.body;
     setBook(newBook(name, author, price));
-    res.send("Book updated!");
+    res.send("Book created!");
 });
 
 app.delete("/:name", Auth, (req, res) => {
     const { name } = req.params;
-    removeBook(name);
-    res.send("Book deleted!");
+
+    if (name && books.has(name)) {
+        removeBook(name);
+        res.send(`${name} was deleted!`);
+    } else {
+        res.sendStatus(404);
+    }
 });
 
 export default app;
