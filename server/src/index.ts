@@ -4,16 +4,17 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import {
     genHashedPassword,
-    genUUID,
     checkPassword,
-    setSessionCookie,
     User,
     UserDB,
     Auth,
     AuthErr,
     AuthResponse,
     parseCookiePayload,
+    genSessionId,
 } from "./auth";
+
+import { setJidCookie, clearJidCookie } from "./cookies";
 
 import booksRouter from "./routers/books";
 import { config } from "dotenv";
@@ -42,7 +43,7 @@ export const users = new Map<string, UserDB>();
 const changeUserUuid = (username: string) => {
     const user = users.get(username);
     if (!user) return;
-    users.set(username, { ...user, uuid: genUUID() });
+    users.set(username, { ...user, sessionId: genSessionId() });
 };
 
 function sendMissingUser(res: Response) {
@@ -60,7 +61,7 @@ app.get("/auth-state", Auth, (_req, res) => {
 app.get("/logout", Auth, (req, res) => {
     const jid = parseCookiePayload(req)!;
     changeUserUuid(jid.username);
-    res.cookie("jid", "");
+    clearJidCookie(res);
     res.sendStatus(200);
 });
 
@@ -78,15 +79,15 @@ app.post("/register", async (req, res) => {
     }
 
     const hashed = await genHashedPassword(password);
-    const uuid = genUUID();
+    const sessionId = genSessionId();
 
     users.set(username, {
         username,
         password: hashed,
-        uuid,
+        sessionId,
     });
 
-    setSessionCookie(res, username, uuid);
+    setJidCookie(res, { username, sessionId });
     res.json({ isLogged: true, username, msg: "" } as AuthResponse);
 });
 
@@ -107,10 +108,10 @@ app.post("/login", async (req, res) => {
     }
 
     // update user uuid
-    const uuid = genUUID();
-    users.set(username, { ...users.get(username)!, uuid });
+    const sessionId = genSessionId();
+    users.set(username, { ...users.get(username)!, sessionId });
 
-    setSessionCookie(res, username, uuid);
+    setJidCookie(res, { username, sessionId });
     res.json({ isLogged: true, username, msg: "" } as AuthResponse);
 });
 
