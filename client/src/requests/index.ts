@@ -65,11 +65,6 @@ export async function authState(): Promise<AuthStateResponse> {
         return { isLogged: false };
     }
 }
-type UsernameResponse = { ok: boolean; username: string };
-export async function getUsername(): Promise<UsernameResponse> {
-    const res = await request("GET", url("username"));
-    return (await res.json()) as UsernameResponse;
-}
 
 export async function getBooks() {
     const res = await fetch(url("books"));

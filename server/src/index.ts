@@ -1,24 +1,25 @@
-import Express, { Response } from "express";
+import Express, { Request, Response } from "express";
 import bodyParser from "body-parser";
 import cookieParser from "cookie-parser";
 import cors from "cors";
-import {
-    genHashedPassword,
-    checkPassword,
-    User,
-    UserDB,
-    Auth,
-    AuthErr,
-    AuthResponse,
-    parseCookiePayload,
-    genSessionId,
-} from "./auth";
-
-import { setJidCookie, clearJidCookie } from "./cookies";
-
-import booksRouter from "./routers/books";
 import { config } from "dotenv";
 config();
+
+import { compare, genSalt, hash } from "bcrypt";
+import {
+    setSessionCookie,
+    clearSessionCookie,
+    parseCookie,
+    CookiePayload,
+} from "./cookies";
+
+import {
+    sendAuthErr,
+    verifyCredentials,
+    verifySessionCookie,
+    genSessionId,
+} from "./functions";
+import booksRouter from "./routers/books";
 
 const app = Express();
 const PORT = process.env.PORT || 8080;
@@ -39,80 +40,78 @@ app.use("/books", booksRouter);
 
 // auth
 
-export const users = new Map<string, UserDB>();
-const changeUserUuid = (username: string) => {
-    const user = users.get(username);
-    if (!user) return;
-    users.set(username, { ...user, sessionId: genSessionId() });
-};
-
-function sendMissingUser(res: Response) {
-    res.status(400).json(AuthErr("Missing username or password"));
+export interface User {
+    username: string;
+    password: string;
 }
+
+export const users = new Map<string, User>();
+export const sessions = new Map<string, string>();
 
 app.get("/users", (req, res) => {
     res.json([...users.values()]);
 });
 
-app.get("/auth-state", Auth, (_req, res) => {
+app.get("/auth-state", (req, res) => {
+    const payload = parseCookie(req) as CookiePayload;
+    verifySessionCookie(payload, res);
     res.json({ isLogged: true });
 });
 
-app.get("/logout", Auth, (req, res) => {
-    const jid = parseCookiePayload(req)!;
-    changeUserUuid(jid.username);
-    clearJidCookie(res);
+app.get("/logout", (req, res) => {
+    const payload = parseCookie(req) as CookiePayload;
+    verifySessionCookie(payload, res);
+
+    sessions.set(payload.username, genSessionId());
+    clearSessionCookie(res);
     res.sendStatus(200);
 });
 
 app.post("/register", async (req, res) => {
-    const { username, password } = req.body as User;
+    const user = req.body as User;
 
-    if (!username || !password) {
-        sendMissingUser(res);
-        return;
-    }
+    verifyCredentials(res, user);
 
-    if (users.has(username)) {
-        res.status(400).json(AuthErr("Username already taken"));
-        return;
-    }
-
-    const hashed = await genHashedPassword(password);
+    const { username, password } = user;
+    const salt = await genSalt();
+    const hashed = await hash(password, salt);
     const sessionId = genSessionId();
 
+    if (users.get(username)) {
+        return sendAuthErr(res, "Username already taken");
+    }
+
     users.set(username, {
-        username,
+        username: username,
         password: hashed,
-        sessionId,
     });
 
-    setJidCookie(res, { username, sessionId });
-    res.json({ isLogged: true, username, msg: "" } as AuthResponse);
+    sessions.set(username, sessionId);
+
+    setSessionCookie(res, { username, sessionId });
+    res.json({ isLogged: true, username, msg: "" });
 });
 
 app.post("/login", async (req, res) => {
-    const { username, password } = req.body as User;
+    const user = req.body as User;
 
-    if (!username || !password) {
-        sendMissingUser(res);
-        return;
-    }
+    verifyCredentials(res, user);
+
+    const { username, password } = user;
 
     const hashed = users.get(username)?.password || "";
-    const isValidPassword = await checkPassword(hashed, password);
+    const isValidPassword = await compare(hashed, password);
 
     if (!isValidPassword) {
-        res.status(400).json(AuthErr("Invalid username or password"));
-        return;
+        return sendAuthErr(res, "Invalid username or password");
     }
 
-    // update user uuid
+    // update user session
     const sessionId = genSessionId();
-    users.set(username, { ...users.get(username)!, sessionId });
+    sessions.set(username, sessionId);
 
-    setJidCookie(res, { username, sessionId });
-    res.json({ isLogged: true, username, msg: "" } as AuthResponse);
+    setSessionCookie(res, { username, sessionId });
+    res.json({ isLogged: true, username, msg: "" });
 });
 
 app.listen(PORT, () => {

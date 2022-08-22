@@ -5,6 +5,7 @@ export default function Navbar() {
 
     const CheckAuth = async () => {
         const { isLogged } = await authState();
+
         console.log({
             isLogged,
             date: new Date().toUTCString(),

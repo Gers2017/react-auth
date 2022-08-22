@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { Auth } from "../auth";
+import { AuthMiddleware } from "../functions";
+
 const app = Router();
 
 export interface Book {
@@ -32,7 +33,7 @@ app.post("/", (req, res) => {
     res.send("Book created!");
 });
 
-app.delete("/:name", Auth, (req, res) => {
+app.delete("/:name", AuthMiddleware, (req, res) => {
     const { name } = req.params;
 
     if (name && books.has(name)) {
