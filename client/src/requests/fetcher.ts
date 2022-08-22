@@ -15,9 +15,9 @@ export function request(
     _headers.append("Content-Type", "application/json");
 
     if (headers) {
-        Object.entries(_headers).forEach(([key, value]) => {
-            _headers.append(key, value);
-        });
+        for (const key in headers) {
+            _headers.append(key, headers[key]);
+        }
     }
 
     return fetch(url, {

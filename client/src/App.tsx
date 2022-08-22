@@ -4,11 +4,13 @@ import {
     deleteBook,
     getBooks,
     loginUser,
+    ping,
     registerUser,
     sendBook,
 } from "./requests";
 import { BooksList, BookForm, Book } from "./books";
 import Navbar from "./Navbar";
+import { setToken } from "./tokens";
 
 export interface User {
     username: string;
@@ -24,6 +26,7 @@ function App() {
                     <Protected fallback={<RegisterForm />}>
                         <Main />
                     </Protected>
+                    <button onClick={ping}>Ping!</button>
                 </section>
             </Provider>
         </div>
@@ -96,10 +99,13 @@ function RegisterForm() {
 
         clearInputs();
         const func = isLoginForm ? loginUser : registerUser;
-        const { isLogged, msg, username } = await func(user);
-        msg && setErrorMsg(msg);
-        if (isLogged) {
-            login(username);
+        const data = await func(user);
+
+        if (data.isLogged) {
+            login(data.username);
+            setToken(data.accessToken);
+        } else {
+            setErrorMsg(data.msg);
         }
     }
 

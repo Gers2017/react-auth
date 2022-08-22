@@ -4,10 +4,10 @@ export default function Navbar() {
     const { isLogged, username, logout } = useAuthContext();
 
     const CheckAuth = async () => {
-        const { isLogged } = await authState();
+        const data = await authState();
 
         console.log({
-            isLogged,
+            ...data,
             date: new Date().toUTCString(),
         });
     };

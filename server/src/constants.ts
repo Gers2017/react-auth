@@ -8,3 +8,5 @@ function getEnv<T>(key: string) {
 }
 
 export const COOKIE_ID = getEnv("COOKIE_ID");
+export const ACCESS_SECRET = getEnv("ACCESS_SECRET");
+export const REFRESH_SECRET = getEnv("REFRESH_SECRET");
